@@ -1,24 +1,25 @@
 import Database from 'better-sqlite3';
 import { input, select, confirm } from '@inquirer/prompts';
-import { convertSQLDate } from '../util/stringHelper.js';
+import { convertSQLDate, sanitizeDescription } from '../util/stringHelper.js';
 
 // Load Thunderbird's SQLite database
 const db = new Database('./data/global-messages-db.sqlite', { readonly: true });
 
 /**
- * Searches for emails matching the item description (excluding eBay emails).
+ * Searches for emails matching the item description (excluding eBay emails) using regular expressions.
  */
 function searchEmails(description) {
+  description = `%${sanitizeDescription(description)}%`;
   const results = db.prepare(`
 SELECT m.id, m.date, mt.c1subject as subject, mt.c0body as body, mt.c3author as author, mt.c4recipients as recipients
 FROM messages m
 JOIN messagesText_content mt ON m.id = mt.docid
-WHERE (LOWER(mt.c0body) LIKE LOWER(?) OR LOWER(mt.c1subject) LIKE LOWER(?))
-  AND LOWER(mt.c3author) NOT LIKE '%ebay%'
-  AND LOWER(mt.c4recipients) NOT LIKE '%ebay%'
+WHERE (mt.c0body LIKE ? OR mt.c1subject LIKE ?)
+  AND mt.c3author NOT LIKE '%ebay%'
+  AND mt.c4recipients NOT LIKE '%ebay%'
 ORDER BY m.date DESC
 LIMIT 50;
-  `).all(`%${description}%`, `%${description}%`);
+  `).all(description, description);
 
   return results;
 }
@@ -27,11 +28,11 @@ LIMIT 50;
  * Extracts price & quantity from email content using regex.
  */
 function extractPriceAndQuantity(emailBody) {
-  let priceMatch = emailBody.match(/\$([0-9]+(\.[0-9]{2})?)/);
-  let quantityMatch = emailBody.match(/Qty:?\s?(\d+)/i);
+  let priceMatches = emailBody.match(/\$([0-9]+(\.[0-9]{2})?)/g);
+  let quantityMatch = emailBody.match(/(?:Qty|Quantity):?\s?(\d+)|(\d+)\s?[×x]|[×x]\s?(\d+)/i);
 
-  let price = priceMatch ? parseFloat(priceMatch[1]) : null;
-  let quantity = quantityMatch ? parseInt(quantityMatch[1]) : 1;
+  let price = priceMatches ? parseFloat(priceMatches[priceMatches.length - 1].slice(1)) : null;
+  let quantity = quantityMatch ? parseInt(quantityMatch[1] || quantityMatch[2] || quantityMatch[3]) : 1;
 
   return { price, quantity };
 }
