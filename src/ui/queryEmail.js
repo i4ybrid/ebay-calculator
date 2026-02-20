@@ -90,6 +90,11 @@ async function enterPriceManually() {
   return { price: parseFloat(price), quantity };
 }
 
+function getLastHalf(description) {
+  const words = description.split(' ').filter(w => w.length > 0);
+  return words.slice(Math.floor(words.length / 2)).join(' ');
+}
+
 /**
  * Main function to iterate through item descriptions & process emails.
  */
@@ -106,9 +111,29 @@ export function closeDb() {
   db.close();
 }
 
+function cleanTitle(description) {
+  return description.replace(/\bin\s*hand\b/gi, '')
+    .replace(/\b(new|sealed|brand\.?new|opened|used|free\.?ship|free\.?shipping|bnwt|nwt|ds|vtg|vintage|nib|ltd\.?|exclusive|rare|collectible|collector)\b/gi, '')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export async function processItem(description) {
+  const cleaned = cleanTitle(description);
   console.log(`\nSearching for: ${description}`);
-  let matches = searchEmails(description);
+  console.log(`Cleaned: ${cleaned}`);
+  let matches = searchEmails(cleaned);
+  
+  if (matches.length === 0) {
+    console.log('No results. Trying last half...');
+    const lastHalf = getLastHalf(cleaned);
+    matches = searchEmails(lastHalf);
+    if (matches.length > 0) {
+      console.log(`  -> Found ${matches.length} email(s)!`);
+    }
+  }
+  
   let selectedEmail = await selectEmail(matches);
   while (selectedEmail === 'new_search') {
     let newDescription = await input({ message: `Enter new search term [${description}]: ` });
