@@ -138,5 +138,8 @@ dist
 # data
 data/*
 
+# But keep itemCost.json
+!data/itemCost.json
+
 # node specific files
 package-lock.json
